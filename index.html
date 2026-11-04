@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; }
+  body { font-family: -apple-system, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif; color: #fff; }
+
+  /* Wallpapers: stacked layers that crossfade */
+  .wall { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 3s ease; }
+  .wall.on { opacity: 1; }
+  .shade { position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(to bottom, rgba(0,0,0,.35) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%); }
+
+  /* Clock */
+  #clock { position: absolute; left: 6vw; top: 7vh; }
+  #time { font-size: 9vw; font-weight: 200; letter-spacing: -0.02em; line-height: 1; }
+  #date { font-size: 2.1vw; font-weight: 400; margin-top: 1.2vh; opacity: .8; }
+
+  /* App row */
+  #row { position: absolute; left: 0; bottom: 14vh; width: 100%; padding-left: 6vw; box-sizing: border-box; white-space: nowrap; }
+  .tile { display: inline-block; vertical-align: top; width: 13vw; height: 7.3vw; margin-right: 1.6vw;
+    border-radius: 1.1vw; text-decoration: none; color: #fff; outline: none; position: relative;
+    box-shadow: 0 1vw 2.4vw rgba(0,0,0,.45);
+    transition: transform .22s ease, box-shadow .22s ease; }
+  .tile span { position: absolute; left: 0; right: 0; top: 50%; margin-top: -1.6vw; text-align: center;
+    font-size: 2.2vw; font-weight: 700; letter-spacing: -0.01em; }
+  .tile:focus { transform: scale(1.14); box-shadow: 0 2vw 4vw rgba(0,0,0,.6), 0 0 0 .28vw rgba(255,255,255,.9); }
+  .tile:focus .label { opacity: 1; }
+  .label { position: absolute; left: 0; right: 0; bottom: -3.4vw; text-align: center; font-size: 1.5vw;
+    font-weight: 500; opacity: 0; transition: opacity .2s ease; text-shadow: 0 1px 6px rgba(0,0,0,.7); }
+
+  #hint { position: absolute; left: 0; right: 0; bottom: 4vh; text-align: center; font-size: 1.2vw; opacity: .45; }
+</style>
+</head>
+<body>
+
+<div id="walls"></div>
+<div class="shade"></div>
+
+<div id="clock">
+  <div id="time">--:--</div>
+  <div id="date"></div>
+</div>
+
+<div id="row"></div>
+<div id="hint">Use the arrow keys to move and OK to open. Press 1 to switch 12/24-hour time.</div>
+
+<script>
+// ---- Edit these -------------------------------------------------------
+var TILES = [
+  { name: "YouTube",     url: "https://www.youtube.com/tv",        a: "#ff3b30", b: "#a50d05" },
+  { name: "Netflix",     url: "https://www.netflix.com/",          a: "#e50914", b: "#4a0206" },
+  { name: "Apple TV",    url: "https://tv.apple.com/",             a: "#3a3a3c", b: "#0a0a0b" },
+  { name: "Prime Video", url: "https://www.primevideo.com/",       a: "#1fb6ff", b: "#05446b" },
+  { name: "Disney+",     url: "https://www.disneyplus.com/",       a: "#3b5bdb", b: "#0b1a5c" },
+  { name: "Showmax",     url: "https://www.showmax.com/",          a: "#ff7a1a", b: "#7a2a00" },
+  { name: "Twitch",      url: "https://www.twitch.tv/",            a: "#9146ff", b: "#2c0f66" },
+  { name: "Google",      url: "https://www.google.com/",           a: "#34a853", b: "#0f4a22" }
+];
+var USE_24H = true;          // press 1 on the remote to flip this
+var WALLPAPER_SECONDS = 25;
+// -----------------------------------------------------------------------
+
+var SCENES = [
+  "radial-gradient(ellipse at 20% 85%, #ff9a5a 0%, rgba(255,154,90,0) 45%), radial-gradient(ellipse at 80% 20%, #5b3aa8 0%, rgba(91,58,168,0) 55%), linear-gradient(#1b1340, #0b1a3a)",
+  "radial-gradient(ellipse at 70% 90%, #19c3b1 0%, rgba(25,195,177,0) 50%), radial-gradient(ellipse at 15% 25%, #2557c4 0%, rgba(37,87,196,0) 55%), linear-gradient(#071a33, #04101f)",
+  "radial-gradient(ellipse at 50% 100%, #ffcf6b 0%, rgba(255,207,107,0) 45%), radial-gradient(ellipse at 90% 15%, #d4506f 0%, rgba(212,80,111,0) 55%), linear-gradient(#2a1233, #120a22)",
+  "radial-gradient(ellipse at 25% 95%, #7be495 0%, rgba(123,228,149,0) 45%), radial-gradient(ellipse at 85% 30%, #1f6f8b 0%, rgba(31,111,139,0) 55%), linear-gradient(#0a2230, #050f17)"
+];
+
+// Build wallpapers
+var wallsEl = document.getElementById("walls");
+var walls = [];
+for (var i = 0; i < SCENES.length; i++) {
+  var w = document.createElement("div");
+  w.className = "wall";
+  w.style.background = SCENES[i];
+  wallsEl.appendChild(w);
+  walls.push(w);
+}
+var cur = 0;
+walls[0].className = "wall on";
+setInterval(function () {
+  walls[cur].className = "wall";
+  cur = (cur + 1) % walls.length;
+  walls[cur].className = "wall on";
+}, WALLPAPER_SECONDS * 1000);
+
+// Build tiles
+var rowEl = document.getElementById("row");
+var tileEls = [];
+for (var t = 0; t < TILES.length; t++) {
+  var d = TILES[t];
+  var a = document.createElement("a");
+  a.className = "tile";
+  a.href = d.url;
+  a.style.background = "linear-gradient(135deg, " + d.a + ", " + d.b + ")";
+  a.innerHTML = '<span></span><div class="label"></div>';
+  a.getElementsByTagName("span")[0].appendChild(document.createTextNode(d.name));
+  a.getElementsByClassName("label")[0].appendChild(document.createTextNode(d.name));
+  rowEl.appendChild(a);
+  tileEls.push(a);
+}
+
+// Remote control navigation
+function focusedIndex() {
+  for (var i = 0; i < tileEls.length; i++) if (tileEls[i] === document.activeElement) return i;
+  return -1;
+}
+function focusTile(i) {
+  if (i < 0) i = 0;
+  if (i > tileEls.length - 1) i = tileEls.length - 1;
+  tileEls[i].focus();
+  var left = tileEls[i].offsetLeft;
+  var vw = window.innerWidth;
+  var shift = Math.max(0, left - vw * 0.5 + tileEls[i].offsetWidth / 2);
+  rowEl.style.transition = "transform .3s ease";
+  rowEl.style.transform = "translateX(" + (-shift) + "px)";
+}
+document.addEventListener("keydown", function (e) {
+  var k = e.keyCode, i = focusedIndex();
+  if (k === 39) { focusTile(i + 1); e.preventDefault(); }
+  else if (k === 37) { focusTile(i - 1); e.preventDefault(); }
+  else if (k === 49 || k === 97) { USE_24H = !USE_24H; tick(); }
+  else if (k === 13 && i >= 0) { tileEls[i].click(); }
+});
+focusTile(0);
+
+// Clock
+var DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+function pad(n) { return n < 10 ? "0" + n : "" + n; }
+function tick() {
+  var n = new Date(), h = n.getHours(), m = n.getMinutes(), s = "";
+  if (USE_24H) s = pad(h) + ":" + pad(m);
+  else s = ((h % 12) || 12) + ":" + pad(m) + (h < 12 ? " AM" : " PM");
+  document.getElementById("time").textContent = s;
+  document.getElementById("date").textContent = DAYS[n.getDay()] + ", " + n.getDate() + " " + MONTHS[n.getMonth()];
+}
+tick();
+setInterval(tick, 10000);
+</script>
+</body>
+</html>
